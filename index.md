@@ -1,6 +1,6 @@
 ---
-title       : Esophageal Cancer
-subtitle    : A Prediction Model
+title       : Esophageal Cancer a Prediction Model
+subtitle    : https://stsebastian.shinyapps.io/DDP_ShinyCancer/
 author      : StSebastian
 job         : 
 framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
