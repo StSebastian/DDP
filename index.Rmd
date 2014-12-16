@@ -1,0 +1,119 @@
+---
+title       : Esophageal Cancer
+subtitle    : A Prediction Model
+author      : StSebastian
+job         : 
+framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
+highlighter : highlight.js  # {highlight.js, prettify, highlight}
+hitheme     : tomorrow      # 
+widgets     : [bootstrap, quiz, shiny, interactive, mathjax]            # {mathjax, quiz, bootstrap}
+ext_widgets : {rCharts: [libraries/nvd3]}
+mode        : selfcontained # {standalone, draft}
+#knit       : slidify::knit2slides
+---
+
+## Introducing the Model
+
+* The model estimates a person's esophageal cancer susceptibility depending on three variables:
+  * age
+  * tabacco consumption
+  * alcohol consumption
+* Calculations are based on the occurance of real esophageal cancer cases coducted in 1980 in Ille-et-Vilaine, France. The data  were  compiled by Breslow, N. E. and Day, N. E. and published by the IARC Lyon and Oxford University Press in the study: Statistical Methods in Cancer Research. 1: The Analysis of Case-Control Studies.
+
+* In order to generate probabilities for esophageal cancer susceptibility cases a logistic regression is applied on the Breslow and Day data using age, tabacco and alcohol consumption as explenatory variables. The resulting model can be used to predict the esophageal cancer probability for different combinations of age, tabacco and alcohol consumption realizations.
+
+
+--- .class #id 
+
+## The Data
+
+The R dataset esoph contains the relevant esophageal cancer data where the variable values are stated in categories having the following levels:
+
+* age: `r levels(esoph$agegp)`
+* alcohol consumption: `r levels(esoph$alcgp)`
+* tabacco consumption: `r levels(esoph$tobgp)`
+```{r, echo=F}
+ head(esoph,1) 
+```
+However, in the original data cancer cases are summarized for each catagory combinatios. For example ncontrols = 40 and ncases = 0 (see above) means 40 people with the respective category combinations were investigated of which none had cancer. 
+
+In order to apply the regression the data have to be decomposed so that for each entry in the original data there are n = ncontrols entries of which m = ncases are labeled as cancer cases.
+
+
+--- .class #id 
+
+## The Regression
+
+Having decomposed the dataset and saved in the dataframe decomp_esoph the logistic regression is conducted and the model saved in fit_esoph. 
+
+
+```{r, echo=F}
+generate_data <- function(row_select){
+      if(row_select[,4]==row_select[,5]){
+        return_data<-as.data.frame(matrix(c(as.character(row_select[,1:3]),1),ncol=4,nrow=row_select[,4],byrow=T),stringsAsFactors = F)
+      }
+      else if(row_select[,4]>0){  
+        canc_rows<-as.data.frame(matrix(c(as.character(row_select[,1:3]),1),ncol=4,nrow=row_select[,4],byrow=T),stringsAsFactors = F)
+        non_canc_rows<-as.data.frame(matrix(c(as.character(row_select[,1:3]),0),ncol=4,nrow=row_select[,5]-row_select[,4],byrow=T),stringsAsFactors = F)	
+        return_data<-rbind(canc_rows,non_canc_rows)
+      }
+      else{return_data<-as.data.frame(matrix(c(as.character(row_select[,1:3]),0),ncol=4,nrow=row_select[,5]-row_select[,4],byrow=T),stringsAsFactors = F)}	
+      return_data
+    }
+    new_cancer_data<-NULL
+    for(i in 1:nrow(esoph)){
+      new_cancer_data<-rbind(new_cancer_data,generate_data(esoph[i,]))
+    }
+
+    colnames(new_cancer_data)<-colnames(esoph)[1:4]	
+    new_cancer_data[,1]<-factor(new_cancer_data[,1],levels=1:6,labels=levels(esoph[,1]))
+    new_cancer_data[,2]<-factor(new_cancer_data[,2],levels=1:4,labels=levels(esoph[,2]))
+    new_cancer_data[,3]<-factor(new_cancer_data[,3],levels=1:4,labels=levels(esoph[,3]))
+    new_cancer_data[,4]<-factor(new_cancer_data[,4])
+    decomp_esoph<-new_cancer_data
+      
+    ##decomp_esoph$ncases[decomp_esoph$ncases>1]<-1 
+    ##decomp_esoph<-decomp_esoph[,-5]
+    levels(decomp_esoph$alcgp)[1]<-"0-39"
+    levels(decomp_esoph$tobgp)[1]<-"0-9"
+
+    conf<-sample(1:nrow(decomp_esoph),size=nrow(decomp_esoph),replace=F)
+    decomp_esoph<-decomp_esoph[conf,]
+    colnames(decomp_esoph)<-c("age","alcohol","tobacco","cancer")
+```
+
+```{r, include=FALSE}
+    library(caret)
+```
+
+```{r, message=FALSE}
+    fit_esoph <- glm (cancer ~ age + alcohol + tobacco, data = decomp_esoph, family = binomial)
+```
+
+Based on the dataset the model achieves the following accuracy:
+
+```{r, message=FALSE}
+    Accuracy <- confusionMatrix (decomp_esoph$cancer, 
+                as.numeric (predict (fit_esoph, decomp_esoph) > 0) ) $overall [1:4]
+    Accuracy
+```
+
+Which means in `r 100*round(Accuracy[1],2)` % of all cases the model is right.
+
+--- .class #id 
+
+## Prediction
+
+Predictions with the model are made in terms of the  the log odds-ratio where a value above 0 indicate a cancer probybility above 50 %.
+
+```{r}
+  prediction <- predict (fit_esoph,data.frame (age = "45-54", alcohol = "80-119", tobacco = "30+" ) )
+  paste ("log odds-ratio",round( prediction, 3), sep=": ")
+```  
+
+By inverting the log odds-ratio (LOR) probabilities can be generated  
+$LOR =  log(\frac{p}{1-p})$ transforms into $LOR^{-1} = \frac{exp(LOR)}{(1+exp(LOR))} = Probability$
+```{r, cache=FALSE}
+  paste ("Cancer Probability", round( exp (prediction) / (1 + exp (prediction) ), 3),sep=": " )
+```
+
